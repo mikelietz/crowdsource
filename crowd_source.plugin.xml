@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<pluggable type="plugin">
+	<name>Crowd Source</name>
+	<license url="http://www.apache.org/licenses/LICENSE-2.0.html">Apache Software License 2.0</license>
+	<author url="http://habariproject.org/">The Habari Community</author>
+	<version>1.0</version>
+	<url>http://habariproject.org/</url>
+	<description><![CDATA[Accept posts from users.]]></description>
+	<copyright>2011</copyright>
+	<guid>27c004ec-9a7f-47c9-85ea-2d89fdeb0d12</guid>
+	<help>
+		<value><![CDATA[
+			<p>You can haz cheezburger.</p>
+		]]></value>
+	</help>
+</pluggable>
