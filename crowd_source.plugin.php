@@ -32,6 +32,11 @@ class CrowdSource extends Plugin
 		return $block;
 	}
 
+	public function action_plugin_activation( $file )
+	{
+		// create the user and group at activation.
+		self::create_crowd_group( "crowd" );
+	}
 
 	public static function create_crowd_group( $name = "crowd" )
 	{
@@ -65,7 +70,7 @@ class CrowdSource extends Plugin
 		// remove new user from the Authenticated Users group, into which it is added automatically
 		if ( UserGroup::exists( 'authenticated' ) ) {
 			$authgroup = UserGroup::get( 'authenticated' );
-//			if ( $authgroup->member( 'crowd_user' ) ) { 	/* I can't figure out why this warns about null for parameter 2. */
+//			if ( $authgroup->member( $crowd_user->id ) ) { 	/* I can't figure out why this warns about null for parameter 2. */
 				$authgroup->remove( $crowd_user->id ); 	/* So, just assume the new user is a member of 'authenticated' */
 //			}						/* and remove accordingly. */
 		}
@@ -80,19 +85,15 @@ class CrowdSource extends Plugin
 	public function get_form( $name = "crowd" /* username, content type, etc? */ )
 	{
 		$form = new FormUI( 'create-content' );
-//		$form->class[] = 'create';
 
 		// Create the Title field
 		$form->append( 'text', 'title', 'null:null', _t( 'Title', 'crowdsource' ) /*, 'admincontrol_text'*/ );
 		$form->title->tabindex = 1;
-//		$form->title->value = $this->title;
 
 		// Create the Content field
 		$form->append( 'textarea', 'content', 'null:null', _t( 'Content', 'crowdsource' )/*, 'admincontrol_textarea'*/ );
 		$form->content->class[] = 'resizable';
 		$form->content->tabindex = 2;
-//		$form->content->value = $this->content;
-//		$form->content->raw = true;
 
 		// Create the Save button
 		$form->append( 'submit', 'save', _t( 'Submit your thing', 'crowdsource' ) /*, 'admincontrol_submit'*/ );
@@ -106,7 +107,7 @@ class CrowdSource extends Plugin
 		$form->userid->value = ( User::get( "{$name} user" ) ? User::get_id( "{$name} user" ) : die("now what?")); // @TODO: need to get this out of the block
 		$form->userid->id = 'userid';
 
-		$form->on_success(array($this, 'crowd_form_publish_success'));
+		$form->on_success( array( $this, 'crowd_form_publish_success' ) );
 
 
 		// Return the form object
@@ -115,23 +116,11 @@ class CrowdSource extends Plugin
 
 	public function crowd_form_publish_success( FormUI $form )
 	{
-		$post_id = 0;
 		// REFACTOR: don't do this here, it's duplicated in Post::create()
 		$post = new Post();
-/*
-		// check the user can create new posts of the set type.
-		$user = User::identify();
-		$type = 'post_'  . Post::type_name( $form->content_type->value );
-		if ( ACL::user_cannot( $user, $type ) || ( ! ACL::user_can( $user, 'post_any', 'create' ) && ! ACL::user_can( $user, $type, 'create' ) ) ) {
-			Session::error( _t( 'Creating that post type is denied' ) );
-			$this->get_blank();
-		}
-*/
-		// REFACTOR: why is this on_success here? We don't even display a form
-//		$form->on_success( array( $this, 'form_publish_success' ) );
 
 		$post->pubdate = HabariDateTime::date_create();
-		$status = Post::status( Options::get( 'crowdsource__substatus', 'published' ) );
+		$status = Options::get( 'crowdsource__substatus', Post::status( 'published' ) );
 
 		$postdata = array(
 			'user_id' => $form->userid->value,
@@ -153,23 +142,35 @@ class CrowdSource extends Plugin
 		// REFACTOR: consider using new Post( $postdata ) instead and call ->insert() manually
 		$post = Post::create( $postdata );
 
-//		$post->info->comments_disabled = !$form->comments_enabled->value;
-
 		// REFACTOR: we should not have to update a post we just created, this should be moved to the post-update functionality above and only called if changes have been made
 		// alternately, perhaps call ->update() or ->insert() as appropriate here, so things that apply to each operation (like comments_disabled) can still be included once outside the conditions above
 		$post->update();
 
-		$permalink = ( $post->status != Post::status( 'published' ) ) ? $post->permalink . '?preview=1' : $post->permalink;
-		Session::notice( sprintf( _t( 'The post %1$s has been saved as %2$s.' ), sprintf( '<a href="%1$s">\'%2$s\'</a>', $permalink, Utils::htmlspecialchars( $post->title ) ), Post::status_name( $post->status ) ) );
+//		$permalink = ( $post->status != Post::status( 'published' ) ) ? $post->permalink . '?preview=1' : $post->permalink;
+//		Session::notice( sprintf( _t( 'The post %1$s has been saved as %2$s.' ), sprintf( '<a href="%1$s">\'%2$s\'</a>', $permalink, Utils::htmlspecialchars( $post->title ) ), Post::status_name( $post->status ) ) );
 //		Utils::redirect( URL::get( 'admin', 'page=publish&id=' . $post->id ) );
 	}
 
 	public function configure()
 	{
 		$ui = new FormUI( 'crowdsource' );
-		$ui->append( 'text', 'customvalue', 'mobilephoto__key', _t( 'License Key', 'mobilephoto' ) );
-		$ui->append( 'submit', 'save', _t( 'Save', 'mobilephoto' ) );
+		// @TODO: do this the smarter way
+		$substatus = $ui->append( 'select', 'substatus', 'crowdsource__substatus', _t( 'Status for submission entries:', 'crowdsource' ) );
+		$substatus->options = array( Post::status( 'published' ) => _t( 'published', 'crowdsource' ), Post::status( 'draft' ) =>  _t( 'draft', 'crowdsource' ) );
+		// @TODO: set the value
+
+		$ui->append( 'submit', 'save', _t( 'Save', 'crowdsource' ) );
+		$ui->on_success( array( $this, 'updated_config' ) );
 		return $ui;
+	}
+
+	/**
+	 * Give the user a session message to confirm options were saved.
+	 **/
+	public function updated_config( FormUI $ui )
+	{
+		Session::notice( _t( 'Options saved.', 'crowdsource' ) );
+		$ui->save();
 	}
 
 }
